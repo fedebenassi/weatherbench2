@@ -40,10 +40,10 @@ import xarray_beam as xbeam
 
 def make_latitude_increasing(dataset: xr.Dataset) -> xr.Dataset:
   """Make sure latitude values are increasing. Flip dataset if necessary."""
-  lat = dataset.latitude.values
+  lat = dataset.lat.values
   if (np.diff(lat) < 0).all():
     reverse_lat = lat[::-1]
-    dataset = dataset.sel(latitude=reverse_lat)
+    dataset = dataset.sel(lat=reverse_lat)
   return dataset
 
 
@@ -53,12 +53,12 @@ def _ensure_aligned_grid(
     atol: float = 1e-3,
 ) -> xr.Dataset:
   """Ensure that the horizontal coordinates on dataset exactly match target."""
-  for coord_name in ['latitude', 'longitude']:
+  for coord_name in ['lat', 'lon']:
     np.testing.assert_allclose(
         dataset[coord_name].data, target[coord_name].data, atol=atol
     )
   return dataset.assign_coords(
-      latitude=target.latitude, longitude=target.longitude
+      lat=target.lat, lon=target.lon
   )
 
 
@@ -112,12 +112,14 @@ def open_source_files(
   Returns:
     (forecast, obs): Tuple containing forecast and ground-truth datasets.
   """
-  obs = xr.open_zarr(obs_path, chunks='auto' if (use_dask or by_init) else None)
   forecast = xr.open_zarr(
       forecast_path,
       # Use dask to decode pressure levels since xr's expand_dims is not lazy
       chunks='auto' if (use_dask or pressure_level_suffixes) else None,
   )
+  obs = xr.open_zarr(obs_path, chunks='auto' if (use_dask or by_init) else None)\
+        #.sel(time = forecast.time) #Added this since the forecast starts later and finishes before
+
 
   if pressure_level_suffixes:
     forecast = _decode_pressure_level_suffixes(forecast)
@@ -126,7 +128,7 @@ def open_source_files(
 
   obs = make_latitude_increasing(obs)
   forecast = make_latitude_increasing(forecast)
-  forecast = _ensure_aligned_grid(forecast, obs)
+  #forecast = _ensure_aligned_grid(forecast, obs)
   forecast = schema.apply_time_conventions(forecast, by_init=by_init)
 
   _ensure_nonempty(obs)
@@ -143,14 +145,16 @@ def _impose_data_selection(
     select_aux: bool = False,
 ) -> xr.Dataset:
   """Returns selection of dataset specified in Selection instance."""
-  if select_aux and selection.aux_variables is not None:
-    sel_variables = set(selection.variables) | set(selection.aux_variables)
-  else:
-    sel_variables = selection.variables
-  dataset = dataset[sel_variables].sel(
-      latitude=selection.lat_slice,
-      longitude=selection.lon_slice,
-  )
+  # We don't need any lon or lat selection right now
+
+  # if select_aux and selection.aux_variables is not None:
+  #   sel_variables = set(selection.variables) | set(selection.aux_variables)
+  # else:
+  #   sel_variables = selection.variables
+  # dataset = dataset[sel_variables].sel(
+  #     lat=selection.lat_slice,
+  #     lon=selection.lon_slice,
+  # )
   if selection.levels is not None and hasattr(dataset, 'level'):
     dataset = dataset.sel(level=selection.levels)
   if select_time:
@@ -318,6 +322,9 @@ def open_forecast_and_truth_datasets(
       pressure_level_suffixes=data_config.pressure_level_suffixes,
   )
 
+  forecast = forecast.set_coords(["lon", 'lat'])
+  obs = obs.set_coords(["lon", 'lat'])
+
   obs_all_times = _impose_data_selection(
       obs,
       data_config.selection,
@@ -328,9 +335,10 @@ def open_forecast_and_truth_datasets(
   )
 
   if data_config.by_init:  # Will select appropriate chunks later
-    obs = obs_all_times
+     obs = obs_all_times
   else:
     obs = _impose_data_selection(obs, data_config.selection, time_dim='time')
+  
   forecast = _impose_data_selection(
       forecast,
       data_config.selection,
@@ -348,17 +356,22 @@ def open_forecast_and_truth_datasets(
   else:
     eval_truth = obs
 
-  if not data_config.by_init:
-    eval_truth, forecast = _ensure_consistent_time_step_sizes(
-        eval_truth, forecast
-    )
+  import pdb; pdb.set_trace()
 
-  if eval_config.evaluate_climatology:
-    climatology = xr.open_zarr(data_config.paths.climatology)
-    climatology = make_latitude_increasing(climatology)
-  else:
-    climatology = None
 
+  # if not data_config.by_init:
+  #   eval_truth, forecast = _ensure_consistent_time_step_sizes(
+  #       eval_truth, forecast
+  #   )
+
+  # if eval_config.evaluate_climatology:
+  #   climatology = xr.open_zarr(data_config.paths.climatology)
+  #   climatology = make_latitude_increasing(climatology)
+  # else:
+  #   climatology = None
+
+  eval_truth = obs
+  climatology = None
   return (forecast, eval_truth, climatology)  # pytype: disable=bad-return-type
 
 
@@ -397,6 +410,8 @@ def _metric_and_region_loop(
     truth[name] = dv.compute(truth)
 
   results = []
+
+
   for name, metric in eval_config.metrics.items():
     logging.info(f'Logging metric: {name}')
     # Add a metric dimension, to be concatenated later
@@ -405,6 +420,7 @@ def _metric_and_region_loop(
       eval_fn = metric.compute_chunk
     else:
       eval_fn = metric.compute
+    import pdb; pdb.set_trace()
     if eval_config.regions is not None:
       tmp_results = []  # For storing different regions
       for region_name, region in eval_config.regions.items():

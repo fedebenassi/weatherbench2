@@ -53,9 +53,9 @@ def _cell_area_from_latitude(points: np.ndarray) -> np.ndarray:
 
 def get_lat_weights(ds: xr.Dataset) -> xr.DataArray:
   """Computes latitude/area weights from latitude coordinate of dataset."""
-  weights = _cell_area_from_latitude(np.deg2rad(ds.latitude.data))
+  weights = _cell_area_from_latitude(np.deg2rad(ds.lat.data))
   weights /= np.mean(weights)
-  weights = ds.latitude.copy(data=weights)
+  weights = ds.lat.copy(data=weights)
   return weights
 
 
@@ -145,14 +145,15 @@ def _spatial_average(
   Returns:
     dataset: Spatially averaged metric.
   """
-  weights = get_lat_weights(dataset)
-  if region is not None:
-    dataset, weights = region.apply(dataset, weights)
-    # ignore NaN/Inf values in regions with zero weight
-    dataset = dataset.where(weights > 0, 0)
-  return dataset.weighted(weights).mean(
-      ["latitude", "longitude"], skipna=skipna
-  )
+  # weights = get_lat_weights(dataset)
+  # if region is not None:
+  #   dataset, weights = region.apply(dataset, weights)
+  #   # ignore NaN/Inf values in regions with zero weight
+  #   dataset = dataset.where(weights > 0, 0)
+  # return dataset.weighted(weights).mean(
+  #     ["lat", "lon"], skipna=skipna
+  # )
+  return dataset.mean(dim = 'time')
 
 
 def _spatial_average_l2_norm(
