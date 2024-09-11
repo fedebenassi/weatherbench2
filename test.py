@@ -2,7 +2,7 @@ import apache_beam
 import weatherbench2
 import xarray as xr
 from weatherbench2 import config
-from weatherbench2.metrics import SpatialMSE
+from weatherbench2.metrics import SpatialMSE, MSE, MADp, SpatialMAE
 from weatherbench2.evaluation import evaluate_in_memory, evaluate_with_beam
 
 forecast_path = '/data01/benassi/wavegraph/wavegraph/swh/long_run_48_16/preds_2022_96h_new.zarr'
@@ -27,10 +27,15 @@ data_config = config.Data(selection=selection,
                           rename_variables={
                                             'deltat' : 'prediction_timedelta'})
 
+# the merging messes up with spatially-averaged measurements and time-averaged ones.
+# particularly, MSE vector (lead_time,) is repeated (init_time,) times to match
+# the dimension of SpatialMSE.
+# it is better to consider two separate datasets to avoid confusion.
 eval_configs = {
   'deterministic': config.Eval(
       metrics={
-          'mse': SpatialMSE(), 
+          'madp' : MADp(),
+          'mae' : SpatialMAE()
       },
   )}
 

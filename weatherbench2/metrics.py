@@ -153,7 +153,7 @@ def _spatial_average(
   # return dataset.weighted(weights).mean(
   #     ["lat", "lon"], skipna=skipna
   # )
-  return dataset.mean(dim = 'time')
+  return dataset.mean('node', skipna=skipna)
 
 
 def _spatial_average_l2_norm(
@@ -269,6 +269,7 @@ class MSE(Metric):
       region: t.Optional[Region] = None,
   ) -> xr.Dataset:
     results = _spatial_average((forecast - truth) ** 2, region=region)
+
     if self.wind_vector_mse is not None:
       for wv in self.wind_vector_mse:
         results[wv.vector_name] = wv.compute_chunk(
@@ -288,7 +289,7 @@ class SpatialMSE(Metric):
       region: t.Optional[Region] = None,
   ) -> xr.Dataset:
     return (forecast - truth) ** 2
-
+  
 
 @dataclasses.dataclass
 class MAE(Metric):
@@ -341,6 +342,47 @@ class SpatialBias(Metric):
   ) -> xr.Dataset:
     return forecast - truth
 
+@dataclasses.dataclass
+class NormMSE(Metric):
+  """Normalized mean squared error."""
+
+  def compute_chunk(
+      self,
+      forecast: xr.Dataset,
+      truth: xr.Dataset,
+      region: t.Optional[Region] = None,
+  ) -> xr.Dataset:
+    return ( forecast - truth ) ** 2 / (truth ** 2)
+  
+@dataclasses.dataclass
+class NormBias(Metric):
+  """Normalized bias."""
+
+  def compute_chunk(
+      self,
+      forecast: xr.Dataset,
+      truth: xr.Dataset,
+      region: t.Optional[Region] = None,
+  ) -> xr.Dataset:
+    return ( forecast - truth ) / (truth)
+  
+@dataclasses.dataclass
+class MADp():
+  """Mean absolute deviation of percentiles (from Campos-Caba et al., 2024)."""
+
+  def compute(
+      self,
+      forecast: xr.Dataset,
+      truth: xr.Dataset,
+      region: t.Optional[Region] = None,
+  ) -> xr.Dataset:
+    
+    pcts = np.arange(0, 1.01, 0.01)
+    mads = abs( forecast.quantile(pcts, dim = 'init_time') - truth.quantile(pcts, dim = 'init_time'))
+
+    return mads.mean('quantile')
+  
+  
 
 @dataclasses.dataclass
 class ACC(Metric):
