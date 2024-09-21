@@ -352,7 +352,7 @@ class NormMSE(Metric):
       truth: xr.Dataset,
       region: t.Optional[Region] = None,
   ) -> xr.Dataset:
-    return ( forecast - truth ) ** 2 / (truth ** 2)
+    return _spatial_average(( forecast - truth ) ** 2 / (truth ** 2))
   
 @dataclasses.dataclass
 class NormBias(Metric):
@@ -364,7 +364,7 @@ class NormBias(Metric):
       truth: xr.Dataset,
       region: t.Optional[Region] = None,
   ) -> xr.Dataset:
-    return ( forecast - truth ) / (truth)
+    return _spatial_average(( forecast - truth ) / (truth))
   
 @dataclasses.dataclass
 class MADp():
@@ -380,7 +380,7 @@ class MADp():
     pcts = np.arange(0, 1.01, 0.01)
     mads = abs( forecast.quantile(pcts, dim = 'init_time') - truth.quantile(pcts, dim = 'init_time'))
 
-    return mads.mean('quantile')
+    return _spatial_average(mads.mean('quantile'))
   
   
 
