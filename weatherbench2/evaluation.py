@@ -112,22 +112,34 @@ def open_source_files(
   Returns:
     (forecast, obs): Tuple containing forecast and ground-truth datasets.
   """
-  forecast = xr.open_zarr(
-      forecast_path,
-      # Use dask to decode pressure levels since xr's expand_dims is not lazy
-      chunks='auto' if (use_dask or pressure_level_suffixes) else None,
-  )
-  obs = xr.open_zarr(obs_path, chunks='auto' if (use_dask or by_init) else None)\
-        #.sel(time = forecast.time) #Added this since the forecast starts later and finishes before
+  # forecast = xr.open_zarr(
+  #     forecast_path,
+  #     # Use dask to decode pressure levels since xr's expand_dims is not lazy
+  #     chunks='auto' if (use_dask or pressure_level_suffixes) else None,
+  # )
+  
+  forecast = xr.open_dataset(
+        forecast_path,
+        # Use dask to decode pressure levels since xr's expand_dims is not lazy
+        chunks={'time' : -1, 'deltat' : -1}, #'auto' if (use_dask or pressure_level_suffixes) else None,
+        drop_variables = ['lon', 'lat'],
+        engine = 'zarr' if forecast_path[-5:] == '.zarr' else 'netcdf4'
+    )
 
+
+  obs = xr.open_zarr(obs_path, #chunks='auto' if (use_dask or by_init) else None,
+                    chunks={'time' : -1},
+                    drop_variables = ['lon', 'lat']
+)
+        #.sel(time = forecast.time) #Added this since the forecast starts later and finishes before
 
   if pressure_level_suffixes:
     forecast = _decode_pressure_level_suffixes(forecast)
   if rename_variables is not None:
     forecast = forecast.rename(rename_variables)
 
-  obs = make_latitude_increasing(obs)
-  forecast = make_latitude_increasing(forecast)
+  #obs = make_latitude_increasing(obs)
+  #forecast = make_latitude_increasing(forecast)
   #forecast = _ensure_aligned_grid(forecast, obs)
   forecast = schema.apply_time_conventions(forecast, by_init=by_init)
 
@@ -322,8 +334,8 @@ def open_forecast_and_truth_datasets(
       pressure_level_suffixes=data_config.pressure_level_suffixes,
   )
 
-  forecast = forecast.set_coords(["lon", 'lat'])
-  obs = obs.set_coords(["lon", 'lat'])
+  #forecast = forecast.set_coords(["lon", 'lat'])
+  #obs = obs.set_coords(["lon", 'lat'])
 
   obs_all_times = _impose_data_selection(
       obs,
@@ -355,9 +367,6 @@ def open_forecast_and_truth_datasets(
       )
   else:
     eval_truth = obs
-
-  import pdb; pdb.set_trace()
-
 
   # if not data_config.by_init:
   #   eval_truth, forecast = _ensure_consistent_time_step_sizes(
@@ -420,7 +429,6 @@ def _metric_and_region_loop(
       eval_fn = metric.compute_chunk
     else:
       eval_fn = metric.compute
-    import pdb; pdb.set_trace()
     if eval_config.regions is not None:
       tmp_results = []  # For storing different regions
       for region_name, region in eval_config.regions.items():
